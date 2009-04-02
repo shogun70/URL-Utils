@@ -4,7 +4,7 @@
 
 PKGNAME = URL-Utils
 PKGVERSION = 0.5
-basedir = file://localhost
+basedir = http://localhost
 destdir = /Library/WebServer/Documents
 prefix = tools/
 pkgreldir = ${PKGNAME}/${PKGVERSION}

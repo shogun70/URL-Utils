@@ -31,17 +31,11 @@ toolsdir = @top_srcdir@/tools
 all : build
 
 build :
-	for DIR in ${SUBDIRS}; do\
-		make -C $${DIR} build;\
-	done
+	for DIR in ${SUBDIRS}; do make -C $${DIR} build; done
 
 clean :
-	for DIR in ${SUBDIRS}; do\
-		make -C $${DIR} clean;\
-	done
+	for DIR in ${SUBDIRS}; do make -C $${DIR} clean; done
 
 install : 
-	for DIR in ${SUBDIRS}; do\
-		make -C $${DIR} install;\
-	done
+	for DIR in ${SUBDIRS}; do make -C $${DIR} install; done
 
