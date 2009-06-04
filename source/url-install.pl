@@ -3,6 +3,9 @@
 # TODO help message
 $GZIP = "/usr/bin/gzip -c";
 $CURL = '/usr/bin/curl';
+$S3CURL = 's3curl.pl';
+$S3_KEY_ID = 'primary';
+$AWS = 'aws';
 $INSTALL = "/usr/bin/install";
 
 use URI;
@@ -22,7 +25,7 @@ if (@ARGV > 1 && $dest !~ /\/$/) {
 
 my $baseHref = "file://localhost" . getcwd;
 my $uri = URI->new_abs($dest, $baseHref);
-$uri->scheme =~ /file|ftp|http/ or die $uri->scheme . " is not a valid scheme\n";
+$uri->scheme =~ /file|ftp|http|s3/ or die $uri->scheme . " is not a valid scheme\n";
 
 my $zipdir;
 $opts{z} || $opts{Z} and $zipdir = tempdir( CLEANUP => 1 );
@@ -39,8 +42,11 @@ for $fname (@ARGV) {
 }
 
 sub install {
-my $fname = shift;
+my $filepath = shift;
 my $uri = shift;
+my $options = shift;
+$filepath =~ /([^\/]+)$/;
+my $fname = $1;
 my $href = $uri->as_string();
 for ($uri->scheme) {
 	/file/ && do {
@@ -51,17 +57,23 @@ for ($uri->scheme) {
 			system("$INSTALL -d $dir > /dev/null");
 			$? == 0 or exit 1;
 		}
-		system("$INSTALL $fname $dir");
+		system("$INSTALL $filepath $dir");
 		next;
 	};
 	/ftp/ && do {
-		`$CURL --silent --ftp-create-dirs --netrc --upload-file $fname $href`;
+		`$CURL --silent --ftp-create-dirs --netrc --upload-file $filepath $href`;
 		next;
 	};
 	/http/ && do {
-		`$CURL --silent --upload-file $fname $href`;
+		`$CURL --silent --upload-file $filepath $href`;
 		next;
 	};
+	/s3/ && do {
+		my $bucket = $uri->authority;
+		my $key = $uri->path . $fname;
+		system("$AWS put $bucket$key $filepath");
+		next;
+	}
 }
 }
 
