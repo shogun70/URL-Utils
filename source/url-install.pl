@@ -1,60 +1,68 @@
 #!/usr/bin/perl
 
 # TODO help message
-
-use Getopt::Std;
-
-my %opts;
-getopts('bB:df:g:m:o:p', \%opts);
-if ($opts{d}) {
-	print STDERR "Create directories option not supported\n";
-	exit(1);
-}
-my $dest = pop @ARGV;
+$GZIP = "/usr/bin/gzip -c";
+$CURL = '/usr/bin/curl';
+$INSTALL = "/usr/bin/install";
 
 use URI;
 use Cwd;
+use File::Temp qw / tempfile tempdir /;
+use Getopt::Std;
 
-$CURL = '/usr/bin/curl';
-
+my %opts;
+getopts('zZ:', \%opts);
+(@ARGV < 2) and die "No destination specified\n";
+my $dest = pop @ARGV;
+(@ARGV < 1) and die "No source files specified\n";
+if (@ARGV > 1 && $dest !~ /\/$/) {
+	warn "Destination directory not terminated with /.\n";
+	$dest .= "/";
+}
 
 my $baseHref = "file://localhost" . getcwd;
 my $uri = URI->new_abs($dest, $baseHref);
-my $href = $uri->as_string();
+$uri->scheme =~ /file|ftp|http/ or die $uri->scheme . " is not a valid scheme\n";
 
-if ($uri->scheme eq "file") {
-	my $path = $uri->path;
-	my $dir = $path;
-	$dir =~ s/\/[^\/]+$//;
-	if (! -d $dir) {
-		system("install -d $dir > /dev/null");
-		$? == 0 or exit 1;
-	}
-        for $fname (@ARGV) {
-		if ($fname eq "-") {
-			open (OUTFILE, ">$path");
-			while (<>) {
-				print OUTFILE;
-			}
-			close (OUTFILE);
-		}
-		else {
-			`cp $fname $path`;
-		}
+my $zipdir;
+$opts{z} || $opts{Z} and $zipdir = tempdir( CLEANUP => 1 );
+
+for $fname (@ARGV) {
+	my $ext = $opts{Z};
+	my $zipname = ($ext) ? "$fname.$ext" : $fname;
+	if ($zipdir) {
+		my $zippath = "$zipdir/$zipname";
+		system("$GZIP $fname > $zippath");
+		install($zippath, $uri);
+		$ext && install ($fname, $uri);
 	}
 }
-elsif ($uri->scheme eq "ftp") {
-        for $fname (@ARGV) {
+
+sub install {
+my $fname = shift;
+my $uri = shift;
+my $href = $uri->as_string();
+for ($uri->scheme) {
+	/file/ && do {
+		my $path = $uri->path;
+		my $dir = $path;
+		$dir =~ s/\/[^\/]+$//;
+		if (! -d $dir) {
+			system("$INSTALL -d $dir > /dev/null");
+			$? == 0 or exit 1;
+		}
+		system("$INSTALL $fname $dir");
+		next;
+	};
+	/ftp/ && do {
 		`$CURL --silent --ftp-create-dirs --netrc --upload-file $fname $href`;
-	}
-}
-elsif ($uri->scheme eq "http") {
-        for $fname (@ARGV) {
+		next;
+	};
+	/http/ && do {
 		`$CURL --silent --upload-file $fname $href`;
-	}
+		next;
+	};
 }
-else {
-	print STDERR $uri->scheme . " is not a valid scheme\n";
-	exit(1);
 }
-exit(0);
+
+exit;
