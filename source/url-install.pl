@@ -125,7 +125,8 @@ sub redirect {
 		}
 		$headers->{"Cache-Control"} = "maxage $maxage";
 	}
-	my $redirectUri = URI->new_abs($uri->path, $installRoot);
+	$installRoot =~ s/\/$//;
+	my $redirectUri = URI->new($installRoot . $uri->path);
 	install($stagingFile, $redirectUri, $headers);
 }
 		
