@@ -67,7 +67,9 @@ for $fname (@ARGV) {
 }
 
 sub redirect {
-	my $fname = shift;
+	my $filepath = shift;
+	$filepath =~ /([^\/]+)$/;
+	my $fname = $1 or die "$filepath is a directory\n";
 	my @filesConf;
 	for my $conf (@locationConf) {
 		my @tmpConf;
@@ -90,13 +92,13 @@ sub redirect {
 		$expires ||= \@expTokens;
 		$filter ||= $conf->get("Filter");
 	}
-	my $stagingFile = $fname;
+	my $stagingFile = $filepath;
 	my $headers = {};
 	if ($filter) {
 		$stagingFile = "$stagedir/$fname";
 		for ($filter) {
 			/DEFLATE/ and do {
-				system("$GZIP $fname > $stagingFile");
+				system("$GZIP $filepath > $stagingFile");
 				$headers->{"Content-Encoding"} = "gzip";
 				next;
 			};
