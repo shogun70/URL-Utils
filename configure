@@ -19,6 +19,14 @@ sub get_subdirs();
 
 process_dir("");
 
+my $reconfigureScript = <<"";
+#!/bin/sh
+$top_srcdir/configure
+
+my $reconfigureBin = "$top_builddir/reconfigure";
+`echo "$reconfigureScript" > $reconfigureBin && chmod +x $reconfigureBin`;
+exit;
+
 sub process_dir($) {
 
 my $reldir = shift;

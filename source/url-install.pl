@@ -58,13 +58,9 @@ if ($hostConf) {
 
 my $stagedir = tempdir( CLEANUP => 1 );
 for $fname (@ARGV) {
-	if ($hostConf) {
-		redirect($fname);
-		exit;
-	}
-	install($fname, $uri);
-	exit;
+	my $rc = ($hostConf) ? redirect($fname) : install($fname, $uri);
 }
+exit;
 
 sub redirect {
 	my $filepath = shift;
