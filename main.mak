@@ -1,8 +1,9 @@
-VPATH = ${srcdir}
+srcdir = @srcdir@
+VPATH = @srcdir@
 
 SUBDIRS = source 
 
-include ${top_srcdir}/mk/gnu.bsdvars.mk
+include @top_srcdir@/mk/gnu.bsdvars.mk
 
 .SUFFIXES :
 .SUFFIXES : .html .xhtml .js .xml .exbl
