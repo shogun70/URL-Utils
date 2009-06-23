@@ -35,7 +35,7 @@ my ($httpConf, $hostConf, $installRoot, @locationConf);
 $httpConf = new Config::ApacheFormat(
 	valid_blocks => ["Host", "Location", "LocationMatch", "Files", "FilesMatch"],
 	valid_directives => ["InstallRoot", "Expires", "Filter"],
-	inheritance_support => 1,
+	inheritance_support => 0,
 	duplicate_directives => "error",
 	case_sensitive => 1
 );
