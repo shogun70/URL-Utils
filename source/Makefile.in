@@ -17,10 +17,8 @@ all : build
 build : ${TARGETS}
 
 install: 
-	[ -d ${destpkglibexecdir} ] || ${INSTALL} -d ${destpkglibexecdir}
-	for FILE in ${TARGETS}; do\
-		${INSTALL} $${FILE} ${destpkglibexecdir}/$${FILE};\
-	done
+	[ -d ${pkglibexecdir} ] || ${INSTALL} -d ${pkglibexecdir}
+	${INSTALL} ${TARGETS} ${pkglibexecdir}/
 
 clean : 
 	-rm ${TARGETS}
