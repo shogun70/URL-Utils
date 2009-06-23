@@ -121,7 +121,7 @@ sub redirect {
 				/years/ and $maxage += $n * 365 * 24 * 60 * 60;
 			}
 		}
-		$headers->{"Cache-Control"} = "maxage $maxage";
+		$headers->{"Cache-Control"} = "max-age=$maxage";
 	}
 	$installRoot =~ s/\/$//;
 	my $redirectUri = URI->new($installRoot . $uri->path);
