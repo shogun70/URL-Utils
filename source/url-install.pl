@@ -84,22 +84,29 @@ sub redirect {
 	}
 	my ($expires, $filter);
 	for $conf (@filesConf) {
-		my @expTokens = $conf->get("Expires");
-		$expires ||= \@expTokens;
-		$filter ||= $conf->get("Filter");
+		my @tokens = $conf->get("Expires");
+		$expires ||= \@tokens if scalar(@tokens);
+		my @tokens = $conf->get("Filter");
+		$filter ||= \@tokens if scalar(@tokens);
 	}
 	my $stagingFile = $filepath;
 	my $headers = {};
 	if ($filter) {
+		my @tokens = @{ $filter };
 		$stagingFile = "$stagedir/$fname";
-		for ($filter) {
+		my $infile = $filepath;
+		foreach (@tokens) {
 			/DEFLATE/ and do {
-				system("$GZIP $filepath > $stagingFile");
+				my $outfile;
+				(undef, $outfile) = tempfile("$fname-XXXX", DIR => $stagedir, SUFFIX => ".gz", OPEN => 0);
+				system("$GZIP $infile > $outfile");
 				$headers->{"Content-Encoding"} = "gzip";
+				$infile = $outfile;
 				next;
 			};
-			die "$filter not recognized\n";
+			die "$_ not recognized\n";
 		}
+		system("mv $infile $stagingFile");
 	}
 	if ($expires) {
 		my @tokens = @{ $expires };
