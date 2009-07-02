@@ -9,6 +9,7 @@ $INSTALL = "/usr/bin/install";
 $HTTP_CONF_FILE = $ENV{HOME} . "/.shurl/http.conf";
 
 use URI;
+use HTTP::Date;
 use Cwd;
 use File::Temp qw / tempfile tempdir /;
 use Getopt::Std;
@@ -17,7 +18,7 @@ use Config::ApacheFormat;
 
 
 my %opts;
-getopts('H:', \%opts);
+getopts('nH:', \%opts);
 (@ARGV < 2) and die "No destination specified\n";
 my $dest = pop @ARGV;
 (@ARGV < 1) and die "No source files specified\n";
@@ -26,6 +27,7 @@ if (@ARGV > 1 && $dest !~ /\/$/) {
 	$dest .= "/";
 }
 $opts{H} and $HTTP_CONF_FILE = $opts{H};
+my $no_exec = $opts{n};
 
 my $baseHref = "file://localhost" . getcwd;
 my $uri = URI->new_abs($dest, $baseHref);
@@ -34,7 +36,7 @@ $uri->scheme =~ /file|ftp|http|s3/ or die $uri->scheme . " is not a valid scheme
 my ($httpConf, $hostConf, $installRoot, @locationConf);
 $httpConf = new Config::ApacheFormat(
 	valid_blocks => ["Host", "Location", "LocationMatch", "Files", "FilesMatch"],
-	valid_directives => ["InstallRoot", "Expires", "Filter"],
+	valid_directives => ["InstallRoot", "Expires", "ProxyExpires", "Filter"],
 	inheritance_support => 0,
 	duplicate_directives => "error",
 	case_sensitive => 1
@@ -43,16 +45,16 @@ $httpConf->read($HTTP_CONF_FILE) or die "Could not read $HTTP_CONF_FILE\n";
 $hostConf = $uri->scheme ? $httpConf->block("Host" => $uri->host) : undef;
 if ($hostConf) {
 	$installRoot = $hostConf->get("InstallRoot") || die "InstallRoot not defined for " . $uri->host . "\n";
-	unshift @locationConf, $hostConf;
+	push @locationConf, $hostConf;
 	foreach ($hostConf->get("LocationMatch")) {
 		my $m = $_->[1];
-		unshift @locationConf, $hostConf->block($_) if $uri->path =~ m($m);
+		push @locationConf, $hostConf->block($_) if $uri->path =~ m($m);
 	}
 	foreach ($hostConf->get("Location")) {
 		my $m = $_->[1];
 		$m =~ s/\?/[^\/]/;
 		$m =~ s/\*/[^\/]*/;
-		unshift @locationConf, $hostConf->block($_) if $uri->path =~ m($m);
+		push @locationConf, $hostConf->block($_) if $uri->path =~ m($m);
 	}
 }
 
@@ -82,10 +84,12 @@ sub redirect {
 		}
 		unshift @filesConf, @tmpConf;
 	}
-	my ($expires, $filter);
+	my ($expires, $proxyExpires, $filter);
 	for $conf (@filesConf) {
 		my @tokens = $conf->get("Expires");
 		$expires ||= \@tokens if scalar(@tokens);
+		my @tokens = $conf->get("ProxyExpires");
+		$proxyExpires ||= \@tokens if scalar(@tokens);
 		my @tokens = $conf->get("Filter");
 		$filter ||= \@tokens if scalar(@tokens);
 	}
@@ -111,30 +115,63 @@ sub redirect {
 	if ($expires) {
 		my @tokens = @{ $expires };
 		my $base = shift @tokens;
-		$base == "access" || die "Only supports 'access plus' in Expires directive\n";
+		$base eq "access" || $base eq "modification" || die "Only supports 'access plus' or 'modification plus' in Expires directives\n";
 		my $plus = shift @tokens;
-		$plus == "plus" || die "Only supports 'access plus' in Expires directive\n";
-		my $maxage = 0;
-		while (1) {
-			my $n = shift @tokens or last;
-			my $unit = shift @tokens or last;
-			for ($unit) {
-				/seconds/ and $maxage += $n;
-				/minutes/ and $maxage += $n * 60;
-				/hours/ and $maxage += $n * 60 * 60;
-				/days/ and $maxage += $n * 24 * 60 * 60;
-				/weeks/ and $maxage += $n * 7 * 24 * 60 * 60;
-				/months/ and $maxage += $n * 30 * 24 * 60 * 60;
-				/years/ and $maxage += $n * 365 * 24 * 60 * 60;
+		$plus == "plus" || die "Only supports 'access plus' or 'modification plus' in Expires directives\n";
+		my $maxage = readAge(@tokens);
+		for ($base) {
+			/access/ and do {
+				$headers->{"Cache-Control"} = "max-age=$maxage";
+				last;
+			};
+			/modification/ and do {
+				my $expireTime = time() + $maxage;
+				$headers->{"Expires"} = time2str($expireTime);
+				last;
+			};
+		}
+	}
+	if ($proxyExpires) {
+		my @tokens = @{ $proxyExpires };
+		my $base = shift @tokens;
+		$base eq "access" || die "Only supports 'access plus' in ProxyExpires directives\n";
+		my $plus = shift @tokens;
+		$plus == "plus" || die "Only supports 'access plus' in ProxyExpires directives\n";
+		my $maxage = readAge(@tokens);
+		for ($base) {
+			/access/ and do {
+				my $txt = $headers->{"Cache-Control"};
+				$txt and $txt .= ", ";
+				$txt .= "s-maxage=$maxage";
+				$headers->{"Cache-Control"} = $txt;
+				last;
 			}
 		}
-		$headers->{"Cache-Control"} = "max-age=$maxage";
 	}
 	$installRoot =~ s/\/$//;
 	my $redirectUri = URI->new($installRoot . $uri->path);
 	install($stagingFile, $redirectUri, $headers);
 }
 		
+
+sub readAge() {
+my $age = 0;
+while (1) {
+	my $n = shift or last;
+	my $unit = shift or last;
+	for ($unit) {
+		/seconds/ and $age += $n;
+		/minutes/ and $age += $n * 60;
+		/hours/ and $age += $n * 60 * 60;
+		/days/ and $age += $n * 24 * 60 * 60;
+		/weeks/ and $age += $n * 7 * 24 * 60 * 60;
+		/months/ and $age += $n * 30 * 24 * 60 * 60;
+		/years/ and $age += $n * 365 * 24 * 60 * 60;
+	}
+}
+return $age;
+}
+
 
 sub install {
 my $filepath = shift;
@@ -152,15 +189,21 @@ for ($uri->scheme) {
 			system("$INSTALL -d $dir > /dev/null");
 			$? == 0 or exit 1;
 		}
-		system("$INSTALL $filepath $dir");
+		my $execStr = "$INSTALL $filepath $dir";
+		system($execStr) unless $no_exec;
+		print STDERR "$execStr\n" if $no_exec;
 		next;
 	};
 	/ftp/ && do {
-		`$CURL --silent --ftp-create-dirs --netrc --upload-file $filepath $href`;
+		my $execStr = "$CURL --silent --ftp-create-dirs --netrc --upload-file $filepath $href";
+		system($execStr) unless $no_exec;
+		print STDERR "$execStr\n" if $no_exec;
 		next;
 	};
 	/http/ && do {
-		`$CURL --silent --upload-file $filepath $href`;
+		my $execStr = "$CURL --silent --upload-file $filepath $href";
+		system($execStr) unless $no_exec;
+		print STDERR "$execStr\n" if $no_exec;
 		next;
 	};
 	/s3/ && do {
@@ -172,7 +215,8 @@ for ($uri->scheme) {
 			$headerString .= "\"$_: $val\" ";
 		}
 		my $execStr = "$AWS put $headerString $bucket$key $filepath --public";
-		system($execStr);
+		system($execStr) unless $no_exec;
+		print STDERR "$execStr\n" if $no_exec;
 		next;
 	}
 }
