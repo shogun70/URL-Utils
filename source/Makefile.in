@@ -16,9 +16,9 @@ all : build
 
 build : ${TARGETS}
 
-install: 
+install: ${TARGETS}
 	[ -d ${pkglibexecdir} ] || ${INSTALL} -d ${pkglibexecdir}
-	${INSTALL} ${TARGETS} ${pkglibexecdir}/
+	${INSTALL} ${.ALLSRC} ${pkglibexecdir}/
 
 clean : 
 	-rm ${TARGETS}
