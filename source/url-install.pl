@@ -40,27 +40,29 @@ my $uri = URI->new_abs($dest, $baseHref);
 $uri->scheme =~ /file|ftp|http|s3/ or die $uri->scheme . " is not a valid scheme\n";
 
 my ($httpConf, $hostConf, $installRoot, @locationConf);
-$httpConf = new Config::ApacheFormat(
-	valid_blocks => ["Host", "Location", "LocationMatch", "Files", "FilesMatch"],
-	valid_directives => ["InstallRoot", "Expires", "ProxyExpires", "Filter"],
-	inheritance_support => 0,
-	duplicate_directives => "error",
-	case_sensitive => 1
-);
-$httpConf->read($HTTP_CONF_FILE) or die "Could not read $HTTP_CONF_FILE\n";
-$hostConf = $uri->scheme ? $httpConf->block("Host" => $uri->host) : undef;
-if ($hostConf) {
-	$installRoot = $hostConf->get("InstallRoot") || die "InstallRoot not defined for " . $uri->host . "\n";
-	push @locationConf, $hostConf;
-	foreach ($hostConf->get("LocationMatch")) {
-		my $m = $_->[1];
-		push @locationConf, $hostConf->block($_) if $uri->path =~ m($m);
-	}
-	foreach ($hostConf->get("Location")) {
-		my $m = $_->[1];
-		$m =~ s/\?/[^\/]/;
-		$m =~ s/\*/[^\/]*/;
-		push @locationConf, $hostConf->block($_) if $uri->path =~ m($m);
+if ($uri->scheme eq "http") {
+	$httpConf = new Config::ApacheFormat(
+		valid_blocks => ["Host", "Location", "LocationMatch", "Files", "FilesMatch"],
+		valid_directives => ["InstallRoot", "Expires", "ProxyExpires", "Filter"],
+		inheritance_support => 0,
+		duplicate_directives => "error",
+		case_sensitive => 1
+	);
+	$httpConf->read($HTTP_CONF_FILE) or die "Could not read $HTTP_CONF_FILE\n";
+	$hostConf = $uri->scheme ? $httpConf->block("Host" => $uri->host) : undef;
+	if ($hostConf) {
+		$installRoot = $hostConf->get("InstallRoot") || die "InstallRoot not defined for " . $uri->host . "\n";
+		push @locationConf, $hostConf;
+		foreach ($hostConf->get("LocationMatch")) {
+			my $m = $_->[1];
+			push @locationConf, $hostConf->block($_) if $uri->path =~ m($m);
+		}
+		foreach ($hostConf->get("Location")) {
+			my $m = $_->[1];
+			$m =~ s/\?/[^\/]/;
+			$m =~ s/\*/[^\/]*/;
+			push @locationConf, $hostConf->block($_) if $uri->path =~ m($m);
+		}
 	}
 }
 
