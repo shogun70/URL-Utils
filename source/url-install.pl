@@ -18,7 +18,13 @@ use Config::ApacheFormat;
 
 
 my %opts;
-getopts('nH:d:', \%opts);
+getopts('nH:d', \%opts);
+
+if ($opts{d}) { # TODO create directories support??
+	print STDERR "Create directories mode not supported. Handled as no-op. \n";
+	exit 0;
+}
+
 (@ARGV < 2) and die "No destination specified\n";
 my $dest = pop @ARGV;
 (@ARGV < 1) and die "No source files specified\n";
@@ -28,11 +34,6 @@ if (@ARGV > 1 && $dest !~ /\/$/) {
 }
 $opts{H} and $HTTP_CONF_FILE = $opts{H};
 my $no_exec = $opts{n};
-
-if $opts{d} {
-	print STDERR "Create directories mode not supported. Handled as NOP."
-	exit 0;
-}
 
 my $baseHref = "file://localhost" . getcwd;
 my $uri = URI->new_abs($dest, $baseHref);
